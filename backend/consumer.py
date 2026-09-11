@@ -1,6 +1,6 @@
 import pandas as pd
 
-df = pd.read_excel('Automacao-teste.xlsx')
+df = pd.read_excel('Automacao-teste.xlsx') 
 
 def consumir_planilha():
     dados = []
@@ -13,4 +13,4 @@ def consumir_planilha():
             "link": linha["LINK"]
         })
 
-    return dados    
+    return dados

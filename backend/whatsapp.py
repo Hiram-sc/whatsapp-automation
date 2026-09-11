@@ -1,20 +1,28 @@
 from backend.consumer import consumir_planilha
 
-from urllib.parse import quote
+from playwright.sync_api import sync_playwright
+
 import time
 import webbrowser
 
+def abrir_whatsapp():
 
-def criar_mensagem(produto, valor, cupom, link):
+    playwright = sync_playwright().start()
 
-    mensagem = quote(
-        f"  {produto} \n\n"
-        f"💰 {valor} \n"
-        f"🏷️ {cupom} \n"
-        f"🔗 {link} \n"
-    )
+    navegador = playwright.chromium.launch(headless=False)
 
-    url = (f"https://api.whatsapp.com/send?phone=5522998452260&text={mensagem}")
+    pagina = navegador.new_page()
 
-    return url
+    pagina.goto("https://web.whatsapp.com")
 
+    return pagina
+
+def enviar_mensagem(pagina, mensagem):
+    campo = pagina.locator("div[contenteditable='true']").last
+
+    campo.click()
+    campo.fill(mensagem)
+    campo.press("Enter")
+
+    return True
+    

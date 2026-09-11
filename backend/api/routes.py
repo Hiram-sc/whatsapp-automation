@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import FileResponse
 
-from backend.whatsapp import criar_mensagem
+from backend.whatsapp import abrir_whatsapp, enviar_mensagem
 from backend.consumer import consumir_planilha  
 
 router = APIRouter()
@@ -11,17 +11,20 @@ def painel():
     return FileResponse("front/index.html")
 
 @router.get("/token")
-def abrir_whatsapp():
+def whatsapp():
 
-    dados = consumir_planilha
+    dados = consumir_planilha()
 
-    for item in dados():
+    pagina = abrir_whatsapp()
 
-        url = criar_mensagem(
-            item["produto"],
-            item["valor"],
-            item["cupom"],
-            item["link"]
+    for item in dados:
+        mensagem = (
+            f"{item['produto']}\n\n"
+            f"💰 {item['valor']}\n"
+            f"🏷️ {item['cupom']}\n"
+            f"🔗 {item["link"]}"
         )
 
-    return RedirectResponse(url=url)
+    enviar_mensagem(pagina, mensagem)
+
+    return {"status": "mensagens enviadas"}
