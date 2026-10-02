@@ -3,19 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel De Token</title>
-    <link rel="stylesheet" href="css/style.css">
-    
+    <title>Painel</title>
+
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <main>
-        <section style="display: flex; flex-direction: column; align-items: center;">
-            <a href="/token">
-                <button type="submit" style="z-index: 100;">
+        <section class="panel">
+            <div class="header">
+                <h2 class="title">Painel</h2>
+            </div>
+
+            <div class="panel-stats">
+                <div class="stat-item">
+                    <label class="text-primary">Mensagens enviadas: </label>
+                    <label class="counter">0</label>
+                </div>
+                
+                <div class="stat-item">
+                    <label class="text-primary">Tempo percorrido: </label>
+                    <label class="counter">00:00</label>
+                </div>
+            </div>
+            
+            <div class="panel-config">
+                <label for="tempo" class="text-primary">
+                    Intervalo entre mensagens (minuto): 
+                </label>
+                
+                <input type="number" name="timer" min="1">
+            </div>
+            
+            <div class="panel-actions">
+                <div class="file-container">
+                    <input 
+                        type="file"
+                        id="planilha"
+                        accept=".xlsx" 
+                        hidden
+                    >
+
+                    <label for="planilha" class="upload">
+                        Anexar planilha
+                    </label>
+                    
+                    <span class="file-name"></span>
+                </div>
+
+                <button id="iniciar" class="btn-start">
                     Iniciar
-                </button>    
-            </a>
+                </button>
+            </div>
+
         </section>
     </main>
+
+    <script src="/static/js/painel.js" defer></script>
+
 </body>
 </html>

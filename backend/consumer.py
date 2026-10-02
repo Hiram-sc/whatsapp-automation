@@ -1,8 +1,9 @@
-import pandas as pd
+import pandas as pd 
 
-df = pd.read_excel('Automacao-teste.xlsx') 
+def consumir_planilha(caminho_arquivo):
 
-def consumir_planilha():
+    df = pd.read_excel(caminho_arquivo)
+    
     dados = []
 
     for _, linha in df.iterrows():
