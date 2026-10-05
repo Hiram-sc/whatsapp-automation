@@ -1,10 +1,11 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import FileResponse
 
 from pathlib import Path
 
 from backend.whatsapp import abrir_whatsapp, conversa, aguardar_gatilho, enviar_mensagem
 from backend.consumer import consumir_planilha 
+from backend.status import zerar_contagem, registrar_envio, obter_contagem
 
 import time
 import shutil
@@ -19,7 +20,10 @@ def painel():
     return FileResponse("front/index.html")
 
 @router.post("/iniciar")
-def whatsapp(planilha: UploadFile = File(...)):
+def whatsapp(
+    planilha: UploadFile = File(...),
+    intervalo: int = Form(...)
+):
 
     caminho_arquivo = UPLOAD_DIR / planilha.filename
 
@@ -28,6 +32,8 @@ def whatsapp(planilha: UploadFile = File(...)):
 
     print("Consumindo planilha...")
     dados = consumir_planilha(caminho_arquivo)
+
+    zerar_contagem()
 
     pagina = abrir_whatsapp()
     print(f"Whatsapp aberto.")
@@ -49,7 +55,17 @@ def whatsapp(planilha: UploadFile = File(...)):
         )
 
         enviar_mensagem(pagina, mensagem)
+        registrar_envio()
 
-        time.sleep(3)
+        time.sleep(intervalo * 60)
 
-    return {"status": "envios iniciados"}
+    return {
+        "status": "envios concluídos",
+        "mensagens": obter_contagem()
+    }
+
+@router.get("/status")
+def status():
+    return {
+        "mensagens": obter_contagem()
+    }

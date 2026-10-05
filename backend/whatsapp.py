@@ -25,9 +25,7 @@ def conversa(pagina):
     return nome_conversa
 
 def preparar_mensagem(pagina, mensagem):
-    campo = pagina.locator(
-        "[data-testid='conversation-compose-box-input']"
-    )
+    campo = pagina.locator("[data-testid='conversation-compose-box-input']")
 
     campo.fill(mensagem)
 
