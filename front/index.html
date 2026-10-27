@@ -45,12 +45,20 @@
                         hidden
                     >
 
-                    <label for="planilha" class="upload">
+                    <label for="planilha" class="btn-secondary">
                         Anexar planilha
                     </label>
                     
                     <span class="file-name"></span>
-                </div>
+                </div>                
+
+                <button
+                    type="button"
+                    id="conectar-whatsapp"
+                    class="btn-secondary"
+                >
+                    Conectar WhatsApp
+                </button>
 
                 <button id="iniciar" class="btn-start">
                     Iniciar
@@ -60,7 +68,44 @@
         </section>
     </main>
 
-    <script src="/static/js/painel.js" defer></script>
+    <!-- Modal de conexão do WhatsApp -->
+    <div
+        class="modal"
+        id="modal-whatsapp"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-titulo"
+        hidden
+    >
+        <div class="modal-content">
+            <button
+                type="button"
+                id="fechar-modal"
+                class="modal-close"
+                aria-label="Fechar modal"
+            >
+                &times;
+            </button>
 
+            <h2 id="modal-titulo">Conectar WhatsApp</h2>
+
+            <p id="qr-status">
+                Preparando conexão...
+            </p>
+
+            <img
+                id="qr-code"
+                alt="QR Code para conectar o WhatsApp"
+                hidden
+            >
+
+            <p class="modal-instructions" id="qr-instrucoes" hidden>
+                No celular, abra o WhatsApp, acesse
+                Dispositivos conectados e escaneie o QR Code.
+            </p>
+        </div>
+    </div>
+
+    <script src="/static/js/painel.js" defer></script>
 </body>
 </html>
