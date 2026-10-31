@@ -78,6 +78,25 @@ def obter_qr_code(pagina: Page) -> bytes | None:
         return None
 
     return capturar_qr_code(pagina)
+
+def selecionar_conversa(pagina: Page, nome_grupo: str):
+    campo_pesquisa = pagina.locator(
+        'input[aria-label="Pesquisar ou começar uma nova conversa"]'
+    )
+
+    campo_pesquisa.wait_for(state="visible")
+
+    campo_pesquisa.fill(nome_grupo)
+
+    resultados = pagina.locator(
+        '[data-testid="cell-frame-container"]'
+    ).filter(
+        has=pagina.locator(
+            f'[data-testid="cell-frame-title"]'
+        ).get_by_text(nome_grupo, exact=True)
+    )
+    
+    return 
  
 def conversa(pagina: Page):
 
@@ -91,16 +110,6 @@ def preparar_mensagem(pagina: Page, mensagem: str):
     campo = pagina.locator("[data-testid='conversation-compose-box-input']")
 
     campo.fill(mensagem)
-
-    return True
-
-def aguardar_gatilho(pagina: Page):
-
-    botao_enviar = pagina.locator("button[aria-label='Enviar']")
-
-    botao_enviar.wait_for(state="visible", timeout=0)
-
-    botao_enviar.wait_for(state="hidden", timeout=0)
 
     return True
 

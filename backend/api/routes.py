@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, Response
 
 from pathlib import Path
 
-from backend.whatsapp import abrir_whatsapp, obter_qr_code, conversa, aguardar_gatilho, enviar_mensagem
+from backend.whatsapp import abrir_whatsapp, obter_qr_code, conversa, enviar_mensagem
 from backend.consumer import consumir_planilha 
 from backend.status import zerar_contagem, registrar_envio, obter_contagem
 
@@ -52,13 +52,11 @@ def capturar_imagem_qr():
     pagina = abrir_whatsapp()
     return obter_qr_code(pagina)
 
-def executar_automacao(dados, intervalo):
+def executar_automacao(dados, intervalo, nome_grupo):
     pagina = abrir_whatsapp()
 
     nome_conversa = conversa(pagina)
     print(f"Conversa detectada: {nome_conversa}")
-
-    aguardar_gatilho(pagina)
 
     for item in dados:
         valor = item["valor"]
@@ -85,7 +83,8 @@ def executar_automacao(dados, intervalo):
 @router.post("/iniciar")
 async def whatsapp(
     planilha: UploadFile = File(...),
-    intervalo: int = Form(...)
+    intervalo: int = Form(...),
+    nome_grupo: str= Form(...)
 ):
 
     caminho_arquivo = UPLOAD_DIR / planilha.filename
@@ -102,13 +101,15 @@ async def whatsapp(
         PLAYWRIGHT_EXECUTOR,
         executar_automacao,
         dados,
-        intervalo
+        intervalo,
+        nome_grupo
     )
 
     return {
         "status": "envios concluídos",
         "mensagens": mensagens
     }
+
 @router.get("/status")
 def status():
     return {
