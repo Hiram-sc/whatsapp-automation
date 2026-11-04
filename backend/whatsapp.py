@@ -1,10 +1,9 @@
+
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
 from backend.qr_code import capturar_qr_code
-
-import time
 
 
 DIRETORIO_PROJETO = Path(__file__).resolve().parent.parent
@@ -19,6 +18,11 @@ SELETOR_QR_CODE = (
 )
 
 SELETOR_PAINEL_WHATSAPP = "#side"
+
+SELETOR_CAMPO_MENSAGEM = (
+    '[data-testid="conversation-compose-box-input"]'
+)
+
 
 def abrir_whatsapp() -> Page:
     global _playwright, _contexto, _pagina
@@ -45,15 +49,16 @@ def abrir_whatsapp() -> Page:
 
     return _pagina
 
+
 def obter_estado_conexao(pagina: Page) -> str:
     """
     Retorna:
         aguardando_qr: QR Code visível.
         conectado: interface principal do WhatsApp visível.
-        carregando: ainda não foi possível identificar o estado.
+        carregando: estado ainda não identificado.
     """
 
-    try: 
+    try:
         qr_code = pagina.locator(SELETOR_QR_CODE).first
 
         if qr_code.is_visible():
@@ -69,61 +74,114 @@ def obter_estado_conexao(pagina: Page) -> str:
 
     return "carregando"
 
-def obter_qr_code(pagina: Page) -> bytes | None:
-    """
-    Retorna a imagem PNG do QR Code, quando disponível.
-    """
 
+def obter_qr_code(pagina: Page) -> bytes | None:
     if obter_estado_conexao(pagina) != "aguardando_qr":
         return None
 
     return capturar_qr_code(pagina)
 
+def fechar_modal_inicial(pagina: Page):
+    dialogos = pagina.locator('[role="dialog"]')
+
+    for indice in range(dialogos.count()):
+        dialogo = dialogos.nth(indice)
+
+        if not dialogo.is_visible():
+            continue
+
+        botoes_fechar = [
+            'button[aria-label="Fechar"]',
+            'button[aria-label="Close"]',
+            '[data-testid="x"]'
+        ]
+
+        for seletor in botoes_fechar:
+            botao = dialogo.locator(seletor).first
+
+            if botao.count() and botao.is_visible():
+                botao.click(timeout=3000)
+                dialogo.wait_for(state="hidden", timeout=5000)
+
+                print("Modal inicial fechado.")
+                return True
+
+        raise RuntimeError(
+            "Um modal está bloqueando o WhatsApp, "
+            "mas não foi possível identificar seu botão de fechar."
+        )
+
+    return False
+
+
 def selecionar_conversa(pagina: Page, nome_grupo: str):
     campo_pesquisa = pagina.locator(
-        'input[aria-label="Pesquisar ou começar uma nova conversa"]'
+        '[data-testid="chat-list-search-container"] input'
     )
 
-    campo_pesquisa.wait_for(state="visible")
-
+    campo_pesquisa.wait_for(state="visible", timeout=15000)
     campo_pesquisa.fill(nome_grupo)
 
     resultados = pagina.locator(
         '[data-testid="cell-frame-container"]'
     ).filter(
         has=pagina.locator(
-            f'[data-testid="cell-frame-title"]'
+            '[data-testid="cell-frame-title"]'
         ).get_by_text(nome_grupo, exact=True)
     )
-    
-    return 
- 
+
+    try:
+        resultados.first.wait_for(
+            state="visible",
+            timeout=15000
+        )
+    except Exception:
+        raise RuntimeError(
+            f'Não foi encontrado um grupo com o nome "{nome_grupo}".'
+        )
+
+    quantidade = resultados.count()
+
+    if quantidade > 1:
+        raise RuntimeError(
+            f'Foi encontrado mais de um resultado com o nome "{nome_grupo}".'
+        )
+
+    resultados.first.click()
+
+    campo_mensagem = pagina.locator(SELETOR_CAMPO_MENSAGEM)
+    campo_mensagem.wait_for(state="visible", timeout=15000)
+
+    print(f'Grupo "{nome_grupo}" aberto com sucesso.')
+
+    return True
+
 def conversa(pagina: Page):
+    campo = pagina.locator(SELETOR_CAMPO_MENSAGEM)
 
-    campo = pagina.locator("[data-testid='conversation-compose-box-input']")
-
-    campo.wait_for(state="visible", timeout=0)
+    campo.wait_for(state="visible", timeout=15000)
 
     return campo.get_attribute("aria-label")
 
-def preparar_mensagem(pagina: Page, mensagem: str):
-    campo = pagina.locator("[data-testid='conversation-compose-box-input']")
 
+def preparar_mensagem(pagina: Page, mensagem: str):
+    campo = pagina.locator(SELETOR_CAMPO_MENSAGEM)
+
+    campo.wait_for(state="visible", timeout=15000)
     campo.fill(mensagem)
 
     return True
 
+
 def enviar_mensagem(pagina: Page, mensagem: str):
+    campo = pagina.locator(SELETOR_CAMPO_MENSAGEM)
 
-    campo = pagina.locator("[data-testid='conversation-compose-box-input']")
-
+    campo.wait_for(state="visible", timeout=15000)
     campo.fill(mensagem)
 
     botao = pagina.locator("button[aria-label='Enviar']")
 
-    time.sleep(3)
-
+    botao.wait_for(state="visible", timeout=10000)
     botao.click()
 
     return True
-    
