@@ -1,87 +1,237 @@
-
-from pathlib import Path
+import logging
+import threading
 
 from playwright.sync_api import Page, sync_playwright
 
+from backend import config, status
 from backend.qr_code import capturar_qr_code
+from backend.selectors import (
+    SELETORES_BOTAO_ENVIAR,
+    SELETORES_BOTAO_FECHAR_MODAL,
+    SELETORES_CAMPO_MENSAGEM,
+    SELETORES_CAMPO_PESQUISA,
+    SELETORES_PAINEL_WHATSAPP,
+    SELETORES_QR_CODE,
+    SELETOR_RESULTADO_CONVERSA,
+    SELETOR_TITULO_CONVERSA,
+    aguardar_primeiro_visivel,
+    primeiro_visivel,
+)
 
 
-DIRETORIO_PROJETO = Path(__file__).resolve().parent.parent
-DIRETORIO_SESSAO = DIRETORIO_PROJETO / "session"
+logger = logging.getLogger(__name__)
+
+_LOCK = threading.RLock()
 
 _playwright = None
 _contexto = None
 _pagina = None
 
-SELETOR_QR_CODE = (
-    'canvas[aria-label="Escaneie o QR code para conectar um dispositivo"]'
-)
 
-SELETOR_PAINEL_WHATSAPP = "#side"
+def _parar_playwright() -> None:
+    global _playwright
 
-SELETOR_CAMPO_MENSAGEM = (
-    '[data-testid="conversation-compose-box-input"]'
-)
+    playwright = _playwright
+    _playwright = None
+
+    if playwright is None:
+        return
+
+    try:
+        playwright.stop()
+        logger.info("Playwright encerrado.")
+        
+    except Exception:
+        logger.exception("Falha ao encerrar o Playwright.")
 
 
 def abrir_whatsapp() -> Page:
     global _playwright, _contexto, _pagina
 
-    if _contexto is None:
-        _playwright = sync_playwright().start()
+    with _LOCK:
+        config.SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
-        _contexto = _playwright.chromium.launch_persistent_context(
-            user_data_dir=str(DIRETORIO_SESSAO),
-            headless=True,
-            channel="chrome"
+        if _contexto is None:
+            if _playwright is not None:
+                logger.warning(
+                    "Playwright parcialmente inicializado. "
+                    "Encerrando antes de tentar novamente."
+                )
+                _parar_playwright()
+
+            status.definir_conexao("conectando")
+
+            try:
+                _playwright = sync_playwright().start()
+
+                opcoes = {
+                    "user_data_dir": str(config.SESSION_DIR),
+                    "headless": config.PLAYWRIGHT_HEADLESS,
+                    "user_agent": config.USER_AGENT,
+                    "args": ["--disable-dev-shm-usage"],
+                }
+
+                if config.PLAYWRIGHT_CHANNEL:
+                    opcoes["channel"] = config.PLAYWRIGHT_CHANNEL
+
+                logger.info(
+                    "Iniciando navegador: channel=%s headless=%s sessao=%s",
+                    config.PLAYWRIGHT_CHANNEL or "padrão",
+                    config.PLAYWRIGHT_HEADLESS,
+                    config.SESSION_DIR,
+                )
+
+                _contexto = _playwright.chromium.launch_persistent_context(
+                    **opcoes
+                )
+                _contexto.set_default_timeout(config.ELEMENT_TIMEOUT_MS)
+                _contexto.set_default_navigation_timeout(
+                    config.NAVIGATION_TIMEOUT_MS
+                )
+
+                logger.info("Contexto persistente criado com sucesso.")
+
+            except Exception as erro:
+                logger.exception(
+                    "Falha ao iniciar o navegador com channel=%s.",
+                    config.PLAYWRIGHT_CHANNEL or "padrão",
+                )
+                _contexto = None
+                _pagina = None
+                _parar_playwright()
+                status.definir_conexao("erro")
+
+                raise RuntimeError(
+                    "Não foi possível iniciar o navegador do WhatsApp. "
+                    "Verifique se o Chromium do Playwright está instalado "
+                    "e se o diretório de sessão é gravável."
+                ) from erro
+
+        try:
+            if _pagina is None or _pagina.is_closed():
+                paginas = _contexto.pages
+
+                if paginas:
+                    _pagina = paginas[0]
+                else:
+                    _pagina = _contexto.new_page()
+        except Exception as erro:
+            logger.exception("Contexto do navegador está inválido.")
+            _contexto = None
+            _pagina = None
+            _parar_playwright()
+            status.definir_conexao("erro")
+            raise RuntimeError(
+                "O navegador do WhatsApp está indisponível. "
+                "Tente novamente."
+            ) from erro
+
+        try:
+            if not _pagina.url.startswith(config.WHATSAPP_URL):
+                logger.info("Navegando para %s", config.WHATSAPP_URL)
+                _pagina.goto(
+                    config.WHATSAPP_URL,
+                    wait_until="domcontentloaded",
+                    timeout=config.NAVIGATION_TIMEOUT_MS,
+                )
+        except Exception as erro:
+            logger.exception("Falha ao abrir o WhatsApp Web.")
+            status.definir_conexao("erro")
+            raise RuntimeError(
+                "Não foi possível abrir o WhatsApp Web."
+            ) from erro
+
+        logger.info(
+            "WhatsApp disponível: url=%s título=%s",
+            _pagina.url,
+            _pagina.title(),
         )
 
-    if _pagina is None or _pagina.is_closed():
-        paginas = _contexto.pages
-
-        if paginas:
-            _pagina = paginas[0]
-        else:
-            _pagina = _contexto.new_page()
-
-    if _pagina.url == "about:blank":
-        _pagina.goto("https://web.whatsapp.com")
-
-    return _pagina
+        return _pagina
 
 
-def obter_estado_conexao(pagina: Page) -> str:
-    """
-    Retorna:
-        aguardando_qr: QR Code visível.
-        conectado: interface principal do WhatsApp visível.
-        carregando: estado ainda não identificado.
-    """
+def fechar_whatsapp() -> None:
+    global _playwright, _contexto, _pagina
 
-    try:
-        qr_code = pagina.locator(SELETOR_QR_CODE).first
+    with _LOCK:
+        pagina = _pagina
+        contexto = _contexto
+        playwright = _playwright
 
-        if qr_code.is_visible():
-            return "aguardando_qr"
+        _pagina = None
+        _contexto = None
+        _playwright = None
 
-        painel = pagina.locator(SELETOR_PAINEL_WHATSAPP)
+        if pagina is not None:
+            try:
+                if not pagina.is_closed():
+                    pagina.close()
+            except Exception:
+                logger.debug("Falha ao fechar a página.", exc_info=True)
 
-        if painel.is_visible():
-            return "conectado"
+        if contexto is not None:
+            try:
+                contexto.close()
+                logger.info("Contexto do navegador fechado.")
+            except Exception:
+                logger.exception("Falha ao fechar o contexto do navegador.")
 
-    except Exception as erro:
-        print(f"Erro ao verificar conexão: {erro}")
+        if playwright is not None:
+            try:
+                playwright.stop()
+                logger.info("Playwright encerrado.")
+            except Exception:
+                logger.exception("Falha ao encerrar o Playwright.")
 
-    return "carregando"
+        status.definir_conexao("desconectado")
+
+
+def obter_estado_conexao(pagina: Page | None) -> str:
+    if pagina is None or pagina.is_closed():
+        estado = "desconectado"
+    else:
+        try:
+            if primeiro_visivel(pagina, SELETORES_QR_CODE) is not None:
+                estado = "aguardando_qr"
+            elif primeiro_visivel(pagina, SELETORES_PAINEL_WHATSAPP) is not None:
+                estado = "conectado"
+            else:
+                estado = "conectando"
+        except Exception:
+            logger.exception("Falha ao verificar o estado da conexão.")
+            status.definir_conexao("erro")
+            return "erro"
+
+    status.definir_conexao(estado)
+    return estado
 
 
 def obter_qr_code(pagina: Page) -> bytes | None:
-    if obter_estado_conexao(pagina) != "aguardando_qr":
+    estado = obter_estado_conexao(pagina)
+
+    if estado == "conectado":
         return None
 
-    return capturar_qr_code(pagina)
+    if estado == "desconectado":
+        raise RuntimeError("O navegador do WhatsApp não está aberto.")
 
-def fechar_modal_inicial(pagina: Page):
+    imagem = capturar_qr_code(pagina, timeout_ms=config.QR_WAIT_TIMEOUT_MS)
+
+    if imagem is not None:
+        return imagem
+
+    estado_atual = obter_estado_conexao(pagina)
+
+    if estado_atual == "conectado":
+        return None
+
+    raise RuntimeError(
+        "O QR Code ainda não está disponível. "
+        f"Estado atual do WhatsApp: {estado_atual}."
+    )
+
+
+def fechar_modal_inicial(pagina: Page) -> bool:
     dialogos = pagina.locator('[role="dialog"]')
 
     for indice in range(dialogos.count()):
@@ -90,55 +240,58 @@ def fechar_modal_inicial(pagina: Page):
         if not dialogo.is_visible():
             continue
 
-        botoes_fechar = [
-            'button[aria-label="Fechar"]',
-            'button[aria-label="Close"]',
-            '[data-testid="x"]'
-        ]
-
-        for seletor in botoes_fechar:
+        for seletor in SELETORES_BOTAO_FECHAR_MODAL:
             botao = dialogo.locator(seletor).first
 
             if botao.count() and botao.is_visible():
                 botao.click(timeout=3000)
                 dialogo.wait_for(state="hidden", timeout=5000)
-
-                print("Modal inicial fechado.")
+                logger.info("Modal inicial do WhatsApp fechado.")
                 return True
 
         raise RuntimeError(
-            "Um modal está bloqueando o WhatsApp, "
-            "mas não foi possível identificar seu botão de fechar."
+            "Um modal está bloqueando o WhatsApp, mas não foi possível "
+            "identificar o botão de fechar."
         )
 
     return False
 
 
-def selecionar_conversa(pagina: Page, nome_grupo: str):
-    campo_pesquisa = pagina.locator(
-        '[data-testid="chat-list-search-container"] input'
+def selecionar_conversa(pagina: Page, nome_grupo: str) -> bool:
+    campo_pesquisa = aguardar_primeiro_visivel(
+        pagina,
+        SELETORES_CAMPO_PESQUISA,
+        config.ELEMENT_TIMEOUT_MS,
     )
 
-    campo_pesquisa.wait_for(state="visible", timeout=15000)
+    if campo_pesquisa is None:
+        raise RuntimeError(
+            "Não foi possível localizar o campo de pesquisa do WhatsApp."
+        )
+
     campo_pesquisa.fill(nome_grupo)
 
-    resultados = pagina.locator(
-        '[data-testid="cell-frame-container"]'
-    ).filter(
-        has=pagina.locator(
-            '[data-testid="cell-frame-title"]'
-        ).get_by_text(nome_grupo, exact=True)
+    resultados = pagina.locator(SELETOR_RESULTADO_CONVERSA).filter(
+        has=pagina.locator(SELETOR_TITULO_CONVERSA).get_by_text(
+            nome_grupo,
+            exact=True,
+        )
     )
 
     try:
         resultados.first.wait_for(
             state="visible",
-            timeout=15000
+            timeout=config.ELEMENT_TIMEOUT_MS,
         )
-    except Exception:
+    except Exception as erro:
+        logger.warning(
+            "Grupo não encontrado: %s",
+            nome_grupo,
+            exc_info=True,
+        )
         raise RuntimeError(
             f'Não foi encontrado um grupo com o nome "{nome_grupo}".'
-        )
+        ) from erro
 
     quantidade = resultados.count()
 
@@ -149,39 +302,43 @@ def selecionar_conversa(pagina: Page, nome_grupo: str):
 
     resultados.first.click()
 
-    campo_mensagem = pagina.locator(SELETOR_CAMPO_MENSAGEM)
-    campo_mensagem.wait_for(state="visible", timeout=15000)
+    campo_mensagem = aguardar_primeiro_visivel(
+        pagina,
+        SELETORES_CAMPO_MENSAGEM,
+        config.ELEMENT_TIMEOUT_MS,
+    )
 
-    print(f'Grupo "{nome_grupo}" aberto com sucesso.')
+    if campo_mensagem is None:
+        raise RuntimeError(
+            "O grupo foi aberto, mas o campo de mensagem não ficou visível."
+        )
 
-    return True
-
-def conversa(pagina: Page):
-    campo = pagina.locator(SELETOR_CAMPO_MENSAGEM)
-
-    campo.wait_for(state="visible", timeout=15000)
-
-    return campo.get_attribute("aria-label")
-
-
-def preparar_mensagem(pagina: Page, mensagem: str):
-    campo = pagina.locator(SELETOR_CAMPO_MENSAGEM)
-
-    campo.wait_for(state="visible", timeout=15000)
-    campo.fill(mensagem)
-
+    logger.info('Grupo "%s" aberto com sucesso.', nome_grupo)
     return True
 
 
-def enviar_mensagem(pagina: Page, mensagem: str):
-    campo = pagina.locator(SELETOR_CAMPO_MENSAGEM)
+def enviar_mensagem(pagina: Page, mensagem: str) -> bool:
+    campo = aguardar_primeiro_visivel(
+        pagina,
+        SELETORES_CAMPO_MENSAGEM,
+        config.ELEMENT_TIMEOUT_MS,
+    )
 
-    campo.wait_for(state="visible", timeout=15000)
+    if campo is None:
+        raise RuntimeError("O campo de mensagem não está disponível.")
+
     campo.fill(mensagem)
 
-    botao = pagina.locator("button[aria-label='Enviar']")
+    botao = aguardar_primeiro_visivel(
+        pagina,
+        SELETORES_BOTAO_ENVIAR,
+        config.ELEMENT_TIMEOUT_MS,
+    )
 
-    botao.wait_for(state="visible", timeout=10000)
+    if botao is None:
+        raise RuntimeError(
+            "O botão de enviar não ficou disponível após preencher a mensagem."
+        )
+
     botao.click()
-
     return True
