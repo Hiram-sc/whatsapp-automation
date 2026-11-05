@@ -15,6 +15,7 @@
 
     --border: rgba(180, 199, 224, 0.12);
     --success: #35c98a;
+    --offline: #c93535;
 
     --radius: 16px;
 }
@@ -426,6 +427,36 @@ button {
     border-color: rgba(57, 133, 255, 0.4);
 }
 
+.button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.button-primary:disabled:hover {
+    background: var(--primary);
+}
+
+.form-feedback {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 9px;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.form-feedback.error {
+    background: rgba(201, 53, 53, 0.1);
+    border: 1px solid rgba(201, 53, 53, 0.3);
+    color: #ffb4b4;
+}
+
+.form-feedback.success {
+    background: rgba(53, 201, 138, 0.1);
+    border: 1px solid rgba(53, 201, 138, 0.3);
+    color: #a8f0ce;
+}
+
 /* Monitoramento */
 
 .side-panel {
@@ -444,18 +475,33 @@ button {
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--success);
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.8px;
 }
 
-.live-indicator span {
+.live-indicator.success {
+    color: var(--success);
+}
+
+.live-indicator.offline {
+    color: var(--offline);
+}
+
+.live-indicator .indicator-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
+}
+
+.live-indicator.success .indicator-dot {
     background: var(--success);
     box-shadow: 0 0 8px rgba(53, 201, 138, 0.5);
+}
+
+.live-indicator.offline .indicator-dot {
+    background: var(--offline);
+    box-shadow: 0 0 8px rgba(201, 53, 53, 0.5);
 }
 
 .stat-card {
@@ -503,8 +549,10 @@ button {
 .stat-description {
     display: block;
     margin-top: 5px;
-    color: var(--subtle);
-    font-size: 10px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
 }
 
 .info-card {

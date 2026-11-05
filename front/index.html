@@ -74,6 +74,7 @@
                                 id="nome-grupo"
                                 name="nome_grupo"
                                 placeholder="Ex.: Ofertas e promoções"
+                                maxlength="120"
                                 autocomplete="off"
                             >
                         </div>
@@ -97,6 +98,8 @@
                                 id="intervalo"
                                 name="intervalo"
                                 min="1"
+                                max="1440"
+                                step="1"
                                 value="1"
                             >
 
@@ -155,13 +158,15 @@
                             Conectar WhatsApp
                         </button>
 
-                        <button type="button" id="iniciar" class="button button-primary">
+                        <button type="button" id="iniciar" class="button button-primary" disabled>
                             Iniciar automação
                             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="m9 5 10 7-10 7V5Z" fill="currentColor"/>
                             </svg>
                         </button>
                     </div>
+
+                    <p id="form-feedback" class="form-feedback" role="alert" hidden></p>
 
                 </div>
             </div>
@@ -174,9 +179,9 @@
                         <h2>Atividade</h2>
                     </div>
 
-                    <span class="live-indicator">
-                        <span></span>
-                        AO VIVO
+                    <span id="connection-indicator" class="live-indicator offline">
+                        <span class="indicator-dot"></span>
+                        <span id="connection-label" class="indicator-text">OFF-LINE</span>
                     </span>
                 </div>
 
@@ -189,7 +194,9 @@
 
                     <span class="stat-label">Mensagens enviadas</span>
                     <strong id="status" class="stat-value">0</strong>
-                    <span class="stat-description">Total de mensagens processadas</span>
+                    <span id="stat-description" class="stat-description" aria-live="polite">
+                        Total de mensagens processadas
+                    </span>
                 </div>
 
                 <div class="info-card">
@@ -257,7 +264,7 @@
 
                 <div id="qr-placeholder" class="qr-placeholder">
                     <span class="qr-loading"></span>
-                    <span>Aguardando QR Code...</span>
+                    <span id="qr-placeholder-text">Aguardando QR Code...</span>
                 </div>
             </div>
 
