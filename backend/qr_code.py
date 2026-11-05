@@ -1,28 +1,30 @@
-from pathlib import Path
+import logging
+
 from playwright.sync_api import Page
 
-def capturar_qr_code(pagina: Page) -> bytes | None:
-    """
-    Captura o QR Code do WhatsApp Web.
+from backend import config
+from backend.selectors import SELETORES_QR_CODE, aguardar_primeiro_visivel
 
-    Retorna: 
-        bytes: imagem PNG do QR Code
-        None: se o QR Code não estiver disponível
-    """
 
-    seletor = (
-        'canvas[aria-label="Escaneie o QR code para conectar um dispositivo"]'
-    )
+logger = logging.getLogger(__name__)
 
-    qr_code = pagina.locator(seletor).first
 
-    if qr_code.count() == 0:
+def capturar_qr_code(pagina: Page, timeout_ms: int | None = None,) -> bytes | None:
+    
+    limite_ms = timeout_ms if timeout_ms is not None else config.QR_WAIT_TIMEOUT_MS
+    qr_code = aguardar_primeiro_visivel(pagina, SELETORES_QR_CODE, limite_ms)
+
+    if qr_code is None:
+        logger.info("QR Code não encontrado após %sms.", limite_ms)
         return None
 
     try:
-        qr_code.wait_for(state="visible", timeout=10000)
         imagem = qr_code.screenshot()
+        logger.info("QR Code capturado com sucesso.")
         return imagem
-
-    except Exception:
-        return None
+    
+    except Exception as erro:
+        logger.exception("Falha ao capturar a imagem do QR Code.")
+        raise RuntimeError(
+            "Não foi possível capturar a imagem do QR Code."
+        ) from erro
