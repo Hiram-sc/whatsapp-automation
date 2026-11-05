@@ -2,13 +2,13 @@
 Teste manual do fluxo de conexão e seleção de grupo do WhatsApp.
 
 Execute na raiz do projeto:
-    python teste_whatsapp.py "Nome exato do grupo"
+    python tests/test_whatsapp.py "Nome exato do grupo"
 
 Por padrão, o script NÃO envia a mensagem. Ele abre o WhatsApp, verifica
 o estado, seleciona o grupo e preenche o campo para inspeção.
 
 Para autorizar o clique de envio:
-    python teste_whatsapp.py "Nome exato do grupo" --enviar
+    python tests/test_whatsapp.py "Nome exato do grupo" --enviar
 
 Use somente em um grupo de teste e com uma mensagem não sensível.
 """
@@ -25,6 +25,8 @@ RAIZ_PROJETO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ_PROJETO))
 
 import backend.whatsapp as whatsapp
+from backend.selectors import SELETORES_CAMPO_MENSAGEM, aguardar_primeiro_visivel
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -54,7 +56,7 @@ def main():
         print(f"URL atual: {pagina.url}")
 
         print("\n[2/5] Verificando estado da conexão (até 60 segundos)...")
-        estado = "carregando"
+        estado = "conectando"
 
         for tentativa in range(60):
             estado = whatsapp.obter_estado_conexao(pagina)
@@ -81,7 +83,15 @@ def main():
         print(f"Seleção concluída para: {args.nome_grupo}")
 
         print("\n[4/5] Confirmando o campo de mensagem...")
-        campo = whatsapp.conversa(pagina)
+        campo = aguardar_primeiro_visivel(
+            pagina,
+            SELETORES_CAMPO_MENSAGEM,
+            15000,
+        )
+
+        if campo is None:
+            raise RuntimeError("O campo de mensagem não ficou visível.")
+
         print(f"Campo visível: {campo.is_visible()}")
         print(f"aria-label do campo: {campo.get_attribute('aria-label')}")
 
@@ -132,17 +142,7 @@ def main():
     finally:
         # Fecha o contexto iniciado por este script para liberar o perfil.
         # Os dados persistentes da sessão ficam no diretório configurado.
-        try:
-            if whatsapp._contexto is not None:
-                whatsapp._contexto.close()
-        except Exception as erro:
-            print(f"Não foi possível fechar o contexto: {erro}")
-
-        try:
-            if whatsapp._playwright is not None:
-                whatsapp._playwright.stop()
-        except Exception as erro:
-            print(f"Não foi possível encerrar Playwright: {erro}")
+        whatsapp.fechar_whatsapp()
 
 
 if __name__ == "__main__":
